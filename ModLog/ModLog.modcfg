@@ -1,0 +1,13 @@
+ModCFG
+{
+    title = ModLog
+    author = YourName
+    modVersion = 0.1.0
+    Plugin
+    {
+        name = ModLog
+        description = Mod Logging tool
+        asmpath = Addons\ModLog\ModLog.dll
+        order = 10
+    }
+}
