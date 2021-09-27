@@ -2,7 +2,7 @@
 using UnityEngine;
 using BalsaCore;
 
-namespace DarkLog
+namespace DLog
 {
     [BalsaAddon]
     public class Loader
@@ -20,7 +20,7 @@ namespace DarkLog
                 loaded = true;
                 go = new GameObject();
             }
-            mod = go.AddComponent<ModLog>();
+            mod = go.AddComponent<ModLogHandler>();
         }
 
         [BalsaAddonInit(invokeTime = AddonInvokeTime.Flight)]

@@ -2,90 +2,94 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Runtime.CompilerServices;
 using System.Collections;
 using UnityEngine;
 
-namespace DarkLog
+namespace DLog
 {
-    public class ModLog : UnityEngine.MonoBehaviour
+    internal class ModLogHandler : MonoBehaviour
     {
+        // For keeping track of when the message was generated
         private static long realtimeEpoch;
+
+        // Queues for dealing with threads
         private readonly static ConcurrentQueue<string> errorMessages = new ConcurrentQueue<string>();
         private readonly static ConcurrentQueue<string> warningMessages = new ConcurrentQueue<string>();
         private readonly static ConcurrentQueue<string> infoMessages = new ConcurrentQueue<string>();
+
+        // Container to keep track of handles' levels
         private readonly static Dictionary<string, int> handleLevel = new Dictionary<string, int>();
+
+        // Useful constants
         public const int MaxLogLevel = sizeof(int) * 8 - 1;
         public const int ErrorLevels = 5;
         public const int WarningLevels = 5;
 
-        static ModLog()
+        static readonly ModLogger logger = new ModLogger("ModLog");
+
+        static ModLogHandler()
         {
             realtimeEpoch = 0;
-            SetHandleLevel("ModLog", new int[] {  
-                0, 
-                1, 
-                2 }, true);
-            SetHandleLevelW("ModLog", new int[] {
-                0,
-                1,
-                2 }, true);
-            SetHandleLevelE("ModLog", new int[] {
-                0,
-                1,
-                2 }, true);
-
             Chat.GameChat.OnPlayerMessageReceived.AddListener(HandleMessage);
+            logger.SetLevel(new int[] { 0, 1, 2 });
+            logger.SetLevelW(new int[] { 0, 1, 2 });
+            logger.SetLevelE(new int[] { 0, 1, 2 });
         }
 
         private static void HandleMessage( Chat.ChatData chatData )
         {
-            bool success = false;
             if ( chatData.player.isLocalPlayer && chatData.isCommand )
             {
-                Regex ModLogrx = new Regex(@"^/ModLog", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-                if (ModLogrx.IsMatch(chatData.message) )
+                string[] message = chatData.message.Substring(1).ToLower().Split(' ');
+                if (message[0] == "modlog" && message.Length > 4)
                 {
-                    Regex setLevelRx = new Regex(@"^\/ModLog\s+(?<op>s|c)[a-z]*\s+(?<handle>[a-z]+)\s+l[a-z]*\s+(?<type>[iwe])[a-z]*\s+(?<levels>(?:[0-9]+)(?:\s+[0-9]+)*)\s*", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-                    Match match = setLevelRx.Match(chatData.message);
-                    if (match.Success)
+                    int enable = -1;
+                    logger.Log($"Modlog Command: {message[1]}", 3);
+                    if ("set".Contains(message[1]))
                     {
-                        bool set = match.Groups["op"].Value.ToLower()[0] == 's';
-                        string handle = match.Groups["handle"].Value.ToLower();
-                        string type = match.Groups["type"].Value.ToLower();
-                        string[] levelsStr = match.Groups["levels"].Value.Split(' ');
-                        int[] levels = new int[levelsStr.Length];
-                        for (int i = 0; i < levels.Length; i++)
-                        {
-                            levels[i] = int.Parse(levelsStr[i]);
-                        }
-                        switch (type[0]) {
-                            case 'i':
-                                ModLog.SetHandleLevel(handle, levels, set) ;
-                                success = true;
-                                break;
-                            case 'w':
-                                ModLog.SetHandleLevelW(handle, levels, set);
-                                success = true;
-                                break;
-                            case 'e':
-                                ModLog.SetHandleLevelE(handle, levels, set);
-                                success = true;
-                                break;
-                            default:
-                                break;
-                        }
-                    } 
+                        enable = 1;
+                    }
+                    else if ("clear".Contains(message[1]))
+                    {
+                        enable = 0;
+                    }
                     else
                     {
-                        LogThread("ModLog", 4, "TestI");
-                        LogThreadW("ModLog", 4, "TestW");
-                        LogThreadE("ModLog", 4, "TestE");
+                        logger.LogE("Invalid Command position 1", 3);
                     }
-                    if (!success)
+
+                    if (enable >= 0)
                     {
-                        Chat.GameChat.PostServerMessage("InvalidCommand, usage: \"/ModLog set/clear <handle> level info/warning/error <level1> <level2> ...\"");
-                        LogThread("ModLog", 0, "Invalid Command");
+                        string handle = message[2];
+                        if ( "levels".Contains(message[3]) )
+                        {
+                            for (int i = 0; i < message.Length - 5; i++)
+                            {
+                                if ("info".Contains(message[4]))
+                                {
+                                    SetHandleLevel(handle, int.Parse(message[5 + i]), enable != 0);
+                                }
+                                else if ("warning".Contains(message[4]))
+                                {
+                                    SetHandleLevelW(handle, int.Parse(message[5 + i]), enable != 0);
+                                }
+                                else if ("error".Contains(message[4]))
+                                {
+                                    SetHandleLevelE(handle, int.Parse(message[5 + i]), enable != 0);
+                                }
+                                else
+                                {
+                                    logger.LogE("Invalid Command position 4", 3);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            logger.LogE("Invalid Command position 3", 3);
+                        }
                     }
+
                 }
             }
         }
@@ -93,11 +97,11 @@ namespace DarkLog
 
         public void Awake()
         {
-            GameObject.DontDestroyOnLoad(this);
-            realtimeEpoch = DateTime.UtcNow.Ticks - (long)(UnityEngine.Time.realtimeSinceStartup * TimeSpan.TicksPerSecond);
-            Log("ModLog", 0, "SanityInfo");
-            LogW("ModLog", 0, "SanityWarning");
-            LogE("ModLog", 0, "SanityError");
+            DontDestroyOnLoad(this);
+            realtimeEpoch = DateTime.UtcNow.Ticks - (long)(Time.realtimeSinceStartup * TimeSpan.TicksPerSecond);
+            logger.Log("SanityInfo");
+            logger.LogW("SanityWarning");
+            logger.LogE("SanityError");
         }
 
         public static int ELevel(int i)
@@ -124,14 +128,14 @@ namespace DarkLog
         {
             if (LevelIsActive(handle.ToLower(), ILevel(logLevel)))
             {
-                    UnityEngine.Debug.Log(PrependText(logLevel, handle, message));
+                    Debug.Log(PrependText(logLevel, handle, message, "I"));
             }
         }
         public static void LogW(string handle, int logLevel, string message)
         {
             if (LevelIsActive(handle.ToLower(), WLevel(logLevel)))
             {
-                UnityEngine.Debug.LogWarning(PrependText(logLevel, handle, message));
+                Debug.LogWarning(PrependText(logLevel, handle, message, "W"));
             }
         }
 
@@ -139,7 +143,7 @@ namespace DarkLog
         {
             if (LevelIsActive(handle.ToLower(), ELevel(logLevel)))
             {
-                UnityEngine.Debug.LogError(PrependText(logLevel, handle, message));
+                Debug.LogError(PrependText(logLevel, handle, message, "E"));
             }
         }
 
@@ -147,7 +151,7 @@ namespace DarkLog
         {
             if (LevelIsActive(handle.ToLower(), ILevel(logLevel)))
             {
-                    infoMessages.Enqueue(PrependText(logLevel, handle, message));
+                    infoMessages.Enqueue(PrependText(logLevel, handle, message, "I"));
             }
         }
 
@@ -155,14 +159,14 @@ namespace DarkLog
         {
             if (LevelIsActive(handle.ToLower(), WLevel(logLevel)))
             {
-                warningMessages.Enqueue(PrependText(logLevel, handle, message));
+                warningMessages.Enqueue(PrependText(logLevel, handle, message, "W"));
             }
         }
         public static void LogThreadE(string handle, int logLevel, string message)
         {
             if (LevelIsActive(handle.ToLower(), ELevel(logLevel)))
             {
-                errorMessages.Enqueue(PrependText(logLevel, handle, message));
+                errorMessages.Enqueue(PrependText(logLevel, handle, message, "E"));
             }
         }
 
@@ -173,30 +177,30 @@ namespace DarkLog
         {
             while (errorMessages.TryDequeue(out string message))
             {
-                UnityEngine.Debug.LogError(message);
+                Debug.LogError(message);
             }
 
             while (warningMessages.TryDequeue(out string message))
             {
-                UnityEngine.Debug.LogWarning(message);
+                Debug.LogWarning(message);
             }
 
             while (infoMessages.TryDequeue(out string message))
             {
-                UnityEngine.Debug.Log(message);
+                Debug.Log(message);
             }
         }
 
-        private static void SetHandleLevel(string handle, int level, bool enable)
+        public static void SetHandleLevel(string handle, int level, bool enable)
         {
             SetHandleLevelGeneric(handle, ILevel(level), enable);
         }
-        private static void SetHandleLevelW(string handle, int level, bool enable)
+        public static void SetHandleLevelW(string handle, int level, bool enable)
         {
             SetHandleLevelGeneric(handle, WLevel(level), enable);
         }
 
-        private static void SetHandleLevelE(string handle, int level, bool enable)
+        public static void SetHandleLevelE(string handle, int level, bool enable)
         {
             SetHandleLevelGeneric(handle, ELevel(level), enable);
         }
@@ -224,14 +228,14 @@ namespace DarkLog
         }
 
 
-        private static void SetHandleLevel(string handle, int[] levels, bool enable)
+        public static void SetHandleLevel(string handle, int[] levels, bool enable)
         {
             foreach ( int level in levels )
             {
                 SetHandleLevelGeneric(handle, ILevel(level), enable);
             }
         }
-        private static void SetHandleLevelW(string handle, int[] levels, bool enable)
+        public static void SetHandleLevelW(string handle, int[] levels, bool enable)
         {
             foreach (int level in levels)
             {
@@ -239,7 +243,7 @@ namespace DarkLog
             }
         }
 
-        private static void SetHandleLevelE(string handle, int[] levels, bool enable)
+        public static void SetHandleLevelE(string handle, int[] levels, bool enable)
         {
             foreach (int level in levels)
             {
@@ -271,9 +275,9 @@ namespace DarkLog
             }
         }
 
-        private static string PrependText(int level, string handle, string message)
+        private static string PrependText(int level, string handle, string message, string levelIdentifier = "")
         {
-            return $"{GetTime()} [{handle}] {{{level}}} {message}";
+            return $"{GetTime()} [{handle}] {{{levelIdentifier} {level}}} {message}";
         }
 
         //RealTimeSinceStartup is not thread safe... somehow.
@@ -281,6 +285,117 @@ namespace DarkLog
         {
             return (DateTime.UtcNow.Ticks - realtimeEpoch) / (float)TimeSpan.TicksPerSecond;
         }
+
+
+
+
+    }
+
+
+    public class ModLogger
+    {
+        public string defaultHandleName = "";
+
+        public ModLogger(object callingObj)
+        {
+            this.defaultHandleName = callingObj.GetType().Name;
+        }
+        public ModLogger(string defaultHandleName)
+        {
+            this.defaultHandleName = defaultHandleName;
+        }
+
+        public void Log(string message, int level, string handle)
+        {
+            ModLogHandler.LogThread(handle, level, message);
+        }
+
+        public void Log(string message, int level = 0)
+        {
+            ModLogHandler.LogThread(defaultHandleName, level, message);
+        }
+
+        public void LogW(string message, int level, string handle)
+        {
+            ModLogHandler.LogThreadW(handle, level, message);
+        }
+
+        public void LogW(string message, int level = 0)
+        {
+            ModLogHandler.LogThreadW(defaultHandleName, level, message);
+        }
+
+        public void LogE(string message, int level, string handle)
+        {
+            ModLogHandler.LogThreadE(handle, level, message);
+        }
+
+        public void LogE(string message, int level = 0)
+        {
+            ModLogHandler.LogThreadE(defaultHandleName, level, message);
+        }
+
+        public void SetLevel(int[] level, bool enable = true)
+        {
+            ModLogHandler.SetHandleLevel(defaultHandleName, level, enable);
+        }
+
+        public void SetLevel(int level, bool enable = true)
+        {
+            ModLogHandler.SetHandleLevel(defaultHandleName, level, enable);
+        }
+
+        public void SetLevel(int[] level, bool enable, string handle)
+        {
+            ModLogHandler.SetHandleLevel(handle, level, enable);
+        }
+
+        public void SetLevel(int level, bool enable, string handle)
+        {
+            ModLogHandler.SetHandleLevel(handle, level, enable);
+        }
+
+        public void SetLevelW(int[] level, bool enable = true)
+        {
+            ModLogHandler.SetHandleLevelW(defaultHandleName, level, enable);
+        }
+
+        public void SetLevelW(int level, bool enable = true)
+        {
+            ModLogHandler.SetHandleLevelW(defaultHandleName, level, enable);
+        }
+
+        public void SetLevelW(int[] level, bool enable, string handle)
+        {
+            ModLogHandler.SetHandleLevelW(handle, level, enable);
+        }
+
+        public void SetLevelW(int level, bool enable, string handle)
+        {
+            ModLogHandler.SetHandleLevelW(handle, level, enable);
+        }
+
+        public void SetLevelE(int[] level, bool enable = true)
+        {
+            ModLogHandler.SetHandleLevelE(defaultHandleName, level, enable);
+        }
+
+        public void SetLevelE(int level, bool enable = true)
+        {
+            ModLogHandler.SetHandleLevelE(defaultHandleName, level, enable);
+        }
+
+        public void SetLevelE(int[] level, bool enable, string handle)
+        {
+            ModLogHandler.SetHandleLevelE(handle, level, enable);
+        }
+
+        public void SetLevelE(int level, bool enable, string handle)
+        {
+            ModLogHandler.SetHandleLevelE(handle, level, enable);
+        }
+
+
 
 
 
