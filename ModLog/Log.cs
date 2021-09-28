@@ -339,6 +339,9 @@ namespace DLog
         public ModLogger(object callingObj)
         {
             this.defaultHandleName = callingObj.GetType().Name;
+            SetLevel(0);
+            SetLevelW(0);
+            SetLevelE(0);
         }
         public ModLogger(string defaultHandleName)
         {
