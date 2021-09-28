@@ -42,55 +42,95 @@ namespace DLog
             if ( chatData.player.isLocalPlayer && chatData.isCommand )
             {
                 string[] message = chatData.message.Substring(1).ToLower().Split(' ');
-                if (message[0] == "modlog" && message.Length > 4)
+                if (message[0] == "modlog")
                 {
-                    int enable = -1;
                     logger.Log($"Modlog Command: {message[1]}", 3);
-                    if ("set".Contains(message[1]))
+                    // /modlog set levels <handle> info/warning/error <levels>
+                    if (message.Length >= 6 && "levels".Contains(message[2]))
                     {
-                        enable = 1;
-                    }
-                    else if ("clear".Contains(message[1]))
-                    {
-                        enable = 0;
-                    }
-                    else
-                    {
-                        logger.LogE("Invalid Command position 1", 3);
-                    }
-
-                    if (enable >= 0)
-                    {
-                        string handle = message[2];
-                        if ( "levels".Contains(message[3]) )
+                        if ("set".Contains(message[1]))
                         {
-                            for (int i = 0; i < message.Length - 5; i++)
-                            {
-                                if ("info".Contains(message[4]))
-                                {
-                                    SetHandleLevel(handle, int.Parse(message[5 + i]), enable != 0);
-                                }
-                                else if ("warning".Contains(message[4]))
-                                {
-                                    SetHandleLevelW(handle, int.Parse(message[5 + i]), enable != 0);
-                                }
-                                else if ("error".Contains(message[4]))
-                                {
-                                    SetHandleLevelE(handle, int.Parse(message[5 + i]), enable != 0);
-                                }
-                                else
-                                {
-                                    logger.LogE("Invalid Command position 4", 3);
-                                }
-                            }
+                            CmdSetHandleLevel(message, true);
+                        }
+                        else if ("clear".Contains(message[1]))
+                        {
+                            CmdSetHandleLevel(message, false);
                         }
                         else
                         {
-                            logger.LogE("Invalid Command position 3", 3);
+                            Chat.GameChat.PostServerMessage("Usage: \"/modlog set levels <handle> info/warning/error <levels>\"");
+                            logger.LogE("Usage: \"/modlog set levels <handle> info/warning/error <levels>\"", 3);
                         }
                     }
+                    // /modlog log <handle> info/warning/error <level> <message>
+                    else if (message.Length >= 6 && "log".Contains(message[1]))
+                    {
+                        string toLog = "";
+                        for ( int i = 5; i < message.Length; i++)
+                        {
+                            toLog += " ";
+                            toLog += message[i];
+                        }
+                        toLog = toLog.Trim();
 
+                        int level;
+                        if ("info".Contains(message[3]) && int.TryParse(message[4], out level))
+                        {
+
+                            logger.Log(toLog, level, message[2]);
+                        }
+                        else if ("warning".Contains(message[3]) && int.TryParse(message[4], out level))
+                        {
+                            logger.LogW(toLog, level, message[2]);
+                        }
+                        else if ("error".Contains(message[3]) && int.TryParse(message[4], out level))
+                        {
+                            logger.LogE(toLog, level, message[2]);
+                        }
+                        else
+                        {
+                            Chat.GameChat.PostServerMessage("Usage: \"/modlog log <handle> info/warning/error <level> <message>\"");
+                            logger.LogE("Usage: \"/modlog log <handle> info/warning/error <level> <message>\"", 3);
+                        }
+                    }
+                    else
+                    {
+                        logger.LogE("Command not recognised", 3);
+                    }
                 }
+            }
+        }
+
+        private static void CmdSetHandleLevel( string[] message, bool enable )
+        {
+            string handle = message[3];
+            if (message.Length > 4 && "levels".Contains(message[2]))
+            {
+                for (int i = 0; i < message.Length - 5; i++)
+                {
+                    if ("info".Contains(message[4]))
+                    {
+                        SetHandleLevel(handle, int.Parse(message[5 + i]), enable);
+                    }
+                    else if ("warning".Contains(message[4]))
+                    {
+                        SetHandleLevelW(handle, int.Parse(message[5 + i]), enable);
+                    }
+                    else if ("error".Contains(message[4]))
+                    {
+                        SetHandleLevelE(handle, int.Parse(message[5 + i]), enable);
+                    }
+                    else
+                    {
+                        Chat.GameChat.PostServerMessage("Usage: \"/modlog set levels <handle> info/warning/error <levels>\"");
+                        logger.LogE("Usage: \"/modlog set levels <handle> info/warning/error <levels>\"", 3);
+                    }
+                }
+            }
+            else
+            {
+                Chat.GameChat.PostServerMessage("Usage: \"/modlog set levels <handle> info/warning/error <levels>\"");
+                logger.LogE("Usage: \"/modlog set levels <handle> info/warning/error <levels>\"", 3);
             }
         }
 
